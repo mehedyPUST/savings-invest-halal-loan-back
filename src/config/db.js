@@ -16,7 +16,7 @@ const connectDB = async () => {
     });
 
     await client.connect();
-    db = client.db(); // uses the database name from the URI
+    db = client.db();
     console.log('✅ MongoDB Native Driver connected successfully');
     return db;
   } catch (error) {
@@ -32,6 +32,30 @@ const getDB = () => {
   return db;
 };
 
+const getClient = () => {
+  if (!client) {
+    throw new Error('MongoClient not connected.');
+  }
+  return client;
+};
+
+/**
+ * Run work inside a MongoDB transaction.
+ * Automatically aborts on error and commits on success.
+ */
+const withTransaction = async (work) => {
+  const session = getClient().startSession();
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      result = await work(session, getDB());
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
+};
+
 const closeDB = async () => {
   if (client) {
     await client.close();
@@ -39,4 +63,4 @@ const closeDB = async () => {
   }
 };
 
-module.exports = { connectDB, getDB, closeDB };
+module.exports = { connectDB, getDB, getClient, withTransaction, closeDB };

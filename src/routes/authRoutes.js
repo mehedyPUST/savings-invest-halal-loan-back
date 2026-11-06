@@ -2,15 +2,27 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const { protect, restrictTo } = require('../middleware/auth');
+const { authLimiter } = require('../middleware/rateLimiter');
+const {
+  handleValidation,
+  loginRules,
+  registerRules,
+  forgotPasswordRules,
+  resetPasswordRules,
+} = require('../middleware/validate');
 
-router.post('/register', protect, restrictTo('manager'), authController.register); // Only manager can create users
-router.post('/login', authController.login);
+router.post('/login', authLimiter, loginRules, handleValidation, authController.login);
 router.post('/logout', authController.logout);
 router.get('/me', protect, authController.getMe);
 router.put('/profile', protect, authController.updateProfile);
+router.post('/register', protect, restrictTo('manager'), registerRules, handleValidation, authController.register);
+
+router.post('/forgot-password', authLimiter, forgotPasswordRules, handleValidation, authController.forgotPassword);
+router.post('/reset-password', authLimiter, resetPasswordRules, handleValidation, authController.resetPassword);
+router.post('/change-password', protect, authController.changePassword);
 
 // Public first-manager bootstrap (only if no users exist)
-router.post('/bootstrap-manager', async (req, res) => {
+router.post('/bootstrap-manager', authLimiter, async (req, res) => {
   try {
     const { getDB } = require('../config/db');
     const bcrypt = require('bcryptjs');
@@ -25,6 +37,9 @@ router.post('/bootstrap-manager', async (req, res) => {
     const { name, email, password, phone } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, message: 'Name, email, password required' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
     }
 
     const hashed = await bcrypt.hash(password, 12);
